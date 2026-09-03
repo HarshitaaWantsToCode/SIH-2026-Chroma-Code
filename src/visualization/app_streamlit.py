@@ -395,7 +395,7 @@ if signal_raw is not None and len(signal_raw) > 0:
         with q2:
             st.markdown(f"""
             <div class="data-panel">
-                <div class="panel-heading">EMITTER IDENTITY <span class="ref-tag">DNA</span></div>
+                <div class="panel-heading">REFERENCE FINGERPRINT <span class="ref-tag">DNA</span></div>
                 <div style="font-size:1.05rem; font-weight:700; color:#F8FAFC; font-family:monospace;">{signal_dna.primary_emitter.emitter_id}</div>
                 <div style="font-size:0.75rem; color:#94A3B8; margin-top:3px;">{signal_dna.primary_emitter.designation[:32]}...</div>
             </div>

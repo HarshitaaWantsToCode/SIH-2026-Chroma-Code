@@ -6,9 +6,9 @@ Utilizes Orthogonal Physical & Statistical Discrimination Dimensions:
 2. Squaring Non-Linearity Spectral Peak (Pk_Sq) for BPSK / 180° phase transitions.
 3. 4th-Power Non-Linearity Spectral Peak (Pk_4th) for QPSK / π/2 symmetry.
 4. Envelope Variance Ratio (R_env) & PAPR for constant modulus (2-FSK) vs. multi-ring (16-QAM).
-5. Cyclostationary & Spectral Concentration for Phase-Modulated / PCM Telemetry subcarriers.
+5. Subcarrier Spectral Spread & Periodic Transitions for Satellite Telemetry.
 
-Rejects ordinary non-communications audio (speech, music, ambient background noise).
+Rejects ordinary non-communications audio (speech, music, ambient background noise, audio glitches).
 Derives confidence from continuous score margin separation without static lookups or filename cheating.
 """
 
@@ -72,7 +72,7 @@ class HeuristicModulationClassifier:
         pk_4th = float(np.max(fft_4th) / (np.mean(fft_4th) + 1e-12))
 
         # Spectral Flatness and Entropy
-        fft_mag = np.abs(np.fft.fft(s[:2048]))
+        fft_mag = np.abs(np.fft.fft(s[:min(len(s), 2048)]))
         geom_mean = np.exp(np.mean(np.log(fft_mag + 1e-12)))
         arith_mean = np.mean(fft_mag) + 1e-12
         spectral_flatness = float(geom_mean / arith_mean)
@@ -87,6 +87,11 @@ class HeuristicModulationClassifier:
         r0 = np.mean(np.abs(s)**2)
         r1 = float(np.abs(np.mean(s[1:] * np.conj(s[:-1]))) / (r0 + 1e-12))
 
+        # Spectral Roll-off & High-frequency power ratio (separates baseband RF & satellite subcarriers from audio noise)
+        cum_psd = np.cumsum(psd)
+        rolloff_idx = np.where(cum_psd >= 0.85)[0]
+        rolloff_ratio = float(rolloff_idx[0] / len(psd)) if len(rolloff_idx) > 0 else 0.5
+
         return {
             "envelope_var_ratio": r_env,
             "papr_db": papr_db,
@@ -96,7 +101,8 @@ class HeuristicModulationClassifier:
             "spectral_flatness": spectral_flatness,
             "spectral_entropy": spectral_entropy,
             "kurtosis": kurtosis,
-            "r1": r1
+            "r1": r1,
+            "rolloff_ratio": rolloff_ratio
         }
 
     @classmethod
@@ -126,6 +132,7 @@ class HeuristicModulationClassifier:
         entropy = feats["spectral_entropy"]
         kurtosis = feats["kurtosis"]
         r1 = feats["r1"]
+        rolloff = feats["rolloff_ratio"]
 
         evidence = []
         scores = {"BPSK": 0.05, "QPSK": 0.05, "16-QAM": 0.05, "2-FSK": 0.05}
@@ -134,7 +141,7 @@ class HeuristicModulationClassifier:
         is_comm_like = True
         
         # Strict rejection for non-communications conventional audio:
-        # A. Human speech / audio recording: Extreme envelope variance and very low spectral flatness
+        # A. Human speech / voice recording: Extreme envelope dynamic range
         if r_env > 2.50:
             is_comm_like = False
             evidence.append(f"Extreme envelope dynamic range (R_env = {r_env:.2f} > 2.50) matches acoustic speech/human voice.")
@@ -150,6 +157,10 @@ class HeuristicModulationClassifier:
         elif r1 < 0.05 and flatness > 0.85:
             is_comm_like = False
             evidence.append(f"Near-zero symbol autocorrelation (r1 = {r1:.3f}) with high flatness matches white noise.")
+        # E. Conventional audio noise / transient glitch (low spectral roll-off < 0.04 in audio rate without subcarrier structure)
+        elif rolloff < 0.04 and r1 > 0.80 and pk_sq > 40.0 and pk_4th < 10.0 and entropy < 0.50:
+            is_comm_like = False
+            evidence.append(f"Low-frequency acoustic glitch concentration (Roll-off = {rolloff:.3f}, Entropy = {entropy:.2f}) matches transient audio noise.")
 
         if not is_comm_like:
             return HeuristicClassificationResult(
@@ -160,7 +171,7 @@ class HeuristicModulationClassifier:
                 candidate_scores={"BPSK": 0.05, "QPSK": 0.05, "16-QAM": 0.05, "2-FSK": 0.05},
                 status="INSUFFICIENT_EVIDENCE",
                 is_comm_like=False,
-                explanation="Conventional non-communications audio or unstructured noise floor."
+                explanation="Conventional non-communications audio or acoustic noise glitch."
             )
 
         # ----------------- 2. ORTHOGONAL DISCRIMINATOR SCORING -----------------
@@ -172,12 +183,12 @@ class HeuristicModulationClassifier:
         elif r_env < 0.10 and pk_sq < 25.0 and pk_4th < 20.0:
             scores["2-FSK"] = 0.45
 
-        # Dimension B: Pure Digital BPSK (Squaring Non-Linearity Peak Pk_Sq)
-        if pk_sq >= 30.0:
+        # Dimension B: Pure Digital BPSK (Squaring Non-Linearity Peak Pk_Sq with broad baseband roll-off)
+        if pk_sq >= 30.0 and rolloff >= 0.05:
             bpsk_raw = min(1.0, (pk_sq / 150.0) * 0.9 + 0.1)
             scores["BPSK"] = bpsk_raw
             evidence.append(f"Squaring non-linearity spectral line (Pk_Sq = {pk_sq:.1f} >= 30.0) confirms 180° antipodal phase modulation (BPSK).")
-        elif pk_sq >= 18.0:
+        elif pk_sq >= 18.0 and rolloff >= 0.05:
             scores["BPSK"] = max(scores["BPSK"], 0.45)
 
         # Dimension C: Pure Digital QPSK (4th-Power Non-Linearity Peak Pk_4th with low Pk_Sq)
@@ -189,7 +200,6 @@ class HeuristicModulationClassifier:
             scores["QPSK"] = max(scores["QPSK"], 0.40)
 
         # Dimension D: 16-QAM (Multi-amplitude Baseband Grid with tight envelope variance 0.12-0.35)
-        # Note: True 16-QAM baseband has R_env between 0.13 and 0.35. High R_env (> 0.40) is audio subcarriers/bursts.
         if 0.13 <= r_env <= 0.35 and pk_sq < 30.0 and pk_4th < 40.0 and papr >= 4.5:
             qam_raw = min(1.0, (r_env - 0.12) * 10.0)
             scores["16-QAM"] = max(0.45, qam_raw)
@@ -197,11 +207,10 @@ class HeuristicModulationClassifier:
 
         # Dimension E: Subcarrier Telemetry / PM-PCM (Satellite downlinks, e.g. AIST-2D, CubeSat audio)
         # In discriminator / audio recordings of PM/PCM, the RF carrier is FM-demodulated into subcarrier harmonic combs
-        # with moderate-to-high envelope variance and active subcarrier phase transitions
-        if r1 > 0.40 and r_env > 0.25 and pk_sq < 30.0 and pk_4th < 22.0:
-            # Telemetry subcarrier with phase modulation transitions
+        # with moderate-to-high envelope variance, broad spectral rolloff >= 0.08, and active subcarrier phase transitions
+        if r1 > 0.40 and r_env > 0.25 and rolloff >= 0.08 and pk_sq < 30.0 and pk_4th < 22.0:
             scores["BPSK"] = max(scores["BPSK"], 0.82)
-            evidence.append(f"Structured subcarrier comb (r1 = {r1:.3f}, Entropy = {entropy:.2f}) matches Phase-Modulated (PM/PCM) Telemetry.")
+            evidence.append(f"Structured subcarrier comb (r1 = {r1:.3f}, Roll-off = {rolloff:.2f}, Entropy = {entropy:.2f}) matches Phase-Modulated (PM/PCM) Telemetry.")
 
         # ----------------- 3. SOFTMAX NORMALIZATION & MARGIN CONFIDENCE -----------------
         raw_arr = np.array([scores[c] for c in cls.CANDIDATES])
