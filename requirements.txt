@@ -17,6 +17,7 @@ torchaudio>=2.2.0
 streamlit>=1.32.0
 plotly>=5.20.0
 matplotlib>=3.8.0
+reportlab>=4.1.0
 
 # Audio/Signal File IO
 soundfile>=0.12.1
