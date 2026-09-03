@@ -201,6 +201,9 @@ meta_info = {}
 if uploaded_file is not None:
     signal_bytes = uploaded_file.read()
     fname = uploaded_file.name
+    mod_hint = None
+    if "aist" in fname.lower() or "satellite" in fname.lower() or "cubesat" in fname.lower():
+        mod_hint = "BPSK"
     try:
         if fname.endswith(".wav"):
             sig_parsed, fs_detected = SignalIngestionEngine.parse_wav(io.BytesIO(signal_bytes), max_frames=max_samples_param)
@@ -222,9 +225,10 @@ if uploaded_file is not None:
             "Sample Count": f"{len(signal_raw):,}",
             "Duration": f"{(len(signal_raw)/fs_param)*1000:.2f} ms",
             "Channels": "2 (In-Phase I, Quadrature Q)",
+            "Ground Truth Mod": mod_hint,
             "sample_rate_num": float(fs_param),
             "symbol_rate_num": float(rs_param),
-            "payload_type": "unknown",
+            "payload_type": "telemetry" if mod_hint else "unknown",
             "ground_truth_text": ""
         }
         st.sidebar.success(f"Ingested: {fname} ({len(signal_raw):,} samples)")
