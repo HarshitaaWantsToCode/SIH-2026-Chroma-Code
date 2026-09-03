@@ -129,21 +129,21 @@ class HeuristicModulationClassifier:
 
         # ----------------- 1. NON-COMMUNICATIONS SIGNAL REJECTION -----------------
         is_comm_like = True
-        if r_env > 0.70:
+        if r_env > 1.80:
             is_comm_like = False
-            evidence.append(f"Extreme envelope dynamic range (R_env = {r_env:.2f} > 0.70) matches acoustic speech.")
-        elif flatness < 0.03:
+            evidence.append(f"Extreme envelope dynamic range (R_env = {r_env:.2f} > 1.80) matches acoustic speech/human voice.")
+        elif flatness < 0.005:
             is_comm_like = False
-            evidence.append(f"Excessively peaky spectrum (Flatness = {flatness:.3f}) matches single-tone acoustic resonance.")
-        elif freq_var < 0.001:
+            evidence.append(f"Excessively peaky spectrum (Flatness = {flatness:.4f}) matches pure unmodulated tone.")
+        elif freq_var < 0.0001:
             is_comm_like = False
             evidence.append(f"Near-zero phase variance (Var(dTheta) = {freq_var:.2e}) indicates continuous acoustic tone without symbol keying.")
-        elif kurtosis >= 1.92 and pk_sq < 15.0 and pk_4th < 15.0:
+        elif kurtosis >= 3.50 and pk_sq < 10.0 and pk_4th < 10.0:
             is_comm_like = False
-            evidence.append(f"Gaussian envelope kurtosis (Kurtosis = {kurtosis:.2f} ≈ 2.00) indicates unstructured thermal/channel noise.")
-        elif r1 < 0.20 and flatness > 0.70:
+            evidence.append(f"High envelope kurtosis (Kurtosis = {kurtosis:.2f}) indicates heavy impulse channel noise.")
+        elif r1 < 0.05 and flatness > 0.88:
             is_comm_like = False
-            evidence.append(f"Low symbol autocorrelation (r1 = {r1:.3f} < 0.20) matches unstructured white noise.")
+            evidence.append(f"Near-zero symbol autocorrelation (r1 = {r1:.3f}) matches unstructured white noise.")
 
         if not is_comm_like:
             return HeuristicClassificationResult(
@@ -154,7 +154,7 @@ class HeuristicModulationClassifier:
                 candidate_scores={"BPSK": 0.1, "QPSK": 0.1, "16-QAM": 0.1, "2-FSK": 0.1},
                 status="INSUFFICIENT_EVIDENCE",
                 is_comm_like=False,
-                explanation="Conventional audio / non-communications-like signal characteristics (acoustic audio or unstructured noise)."
+                explanation="Conventional non-communications audio / unstructured noise."
             )
 
         # ----------------- 2. ORTHOGONAL DISCRIMINATOR SCORING -----------------
@@ -202,7 +202,7 @@ class HeuristicModulationClassifier:
         margin = best_prob - runner_up_prob
 
         # Ambiguous boundary rejection
-        if margin < 0.10 or best_prob < 0.32:
+        if margin < 0.04 or best_prob < 0.28:
             return HeuristicClassificationResult(
                 predicted_modulation="UNKNOWN",
                 confidence=float(round(best_prob, 2)),

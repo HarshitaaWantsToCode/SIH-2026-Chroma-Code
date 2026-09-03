@@ -69,6 +69,15 @@ class SyntheticSignalGenerator:
             "symbol_rate": 250000.0,
             "payload_type": "telemetry",
             "text": "AIRCRAFT_ADSB_HEX_TRACKING_SQUAWK_7700"
+        },
+        "Preset 6: AIST-2D Russian Microsatellite (435.315 MHz PM/PCM Telemetry)": {
+            "modulation": "BPSK",
+            "snr_db": 16.0,
+            "cfo_hz": 650.0,
+            "sample_rate": 2000000.0,
+            "symbol_rate": 250000.0,
+            "payload_type": "telemetry",
+            "text": "AIST-2D_TELEMETRY: SAMARA_UNIV_BEACON_435.315MHZ_SYS_OK"
         }
     }
 
