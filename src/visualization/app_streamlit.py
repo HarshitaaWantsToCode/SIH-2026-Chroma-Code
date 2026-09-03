@@ -799,6 +799,15 @@ if signal_raw is not None and len(signal_raw) > 0:
             """, unsafe_allow_html=True)
 
         # Download Verified Evidence Package & PDF Dossier
+        audit_json = json.dumps({
+            "case_id": st.session_state["case_id"],
+            "timestamp": st.session_state["analysis_timestamp"],
+            "root_capture_hash": evidence_chain.root_capture_hash,
+            "final_seal": evidence_chain.final_evidence_seal,
+            "chain_verified": evidence_chain.is_chain_intact,
+            "blocks": [b.__dict__ for b in evidence_chain.blocks]
+        }, indent=2)
+
         ev_btn1, ev_btn2 = st.columns(2)
         with ev_btn1:
             st.download_button(
