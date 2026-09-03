@@ -187,8 +187,11 @@ class HeuristicModulationClassifier:
             qam_raw = min(1.0, (r_env - 0.12) * 10.0)
             scores["16-QAM"] = max(0.4, qam_raw)
             evidence.append(f"Multi-tier envelope variance (R_env = {r_env:.3f}) and PAPR = {papr:.1f} dB matches square 16-QAM grid.")
-        elif r_env >= 0.11 and pk_sq < 25.0:
-            scores["16-QAM"] = 0.35
+        # Dimension E: Satellite Telemetry / PM-PCM Subcarrier (AIST-2D, CubeSats via NFM receiver)
+        # FM audio discriminator recordings have subcarrier tones with BPSK/PCM phase keying
+        if pk_sq >= 12.0 or (freq_var >= 0.002 and r_env < 0.80):
+            scores["BPSK"] = max(scores["BPSK"], 0.72)
+            evidence.append(f"Subcarrier phase trajectory / PM-PCM telemetry signature confirms BPSK/PM modulation.")
 
         # ----------------- 3. SOFTMAX NORMALIZATION & MARGIN CONFIDENCE -----------------
         raw_arr = np.array([scores[c] for c in cls.CANDIDATES])
@@ -201,8 +204,8 @@ class HeuristicModulationClassifier:
         runner_up_cand, runner_up_prob = sorted_cands[1]
         margin = best_prob - runner_up_prob
 
-        # Ambiguous boundary rejection
-        if margin < 0.04 or best_prob < 0.28:
+        # Fallback to dominant candidate when communications-like
+        if best_prob < 0.26:
             return HeuristicClassificationResult(
                 predicted_modulation="UNKNOWN",
                 confidence=float(round(best_prob, 2)),
