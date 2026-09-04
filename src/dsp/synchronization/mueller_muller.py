@@ -55,7 +55,7 @@ class MuellerMullerTimingRecovery:
         prev_sample = 0.0 + 0.0j
         prev_decision = 0.0 + 0.0j
 
-        while int(idx) < num_samples - 1:
+        while np.isfinite(idx) and int(idx) < num_samples - 1:
             base_idx = int(idx)
             mu = idx - base_idx  # Fractional delay (0 <= mu < 1)
 

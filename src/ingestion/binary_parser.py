@@ -74,12 +74,17 @@ class SignalIngestionEngine:
                 f.seek(offset_bytes)
                 raw_data = np.fromfile(f, dtype=target_dtype, count=count)
         elif isinstance(source, bytes):
-            raw_data = np.frombuffer(source, dtype=target_dtype, count=count, offset=offset_bytes)
+            avail_bytes = max(0, len(source) - offset_bytes)
+            avail_elements = avail_bytes // element_size
+            actual_count = avail_elements if count == -1 else min(count, avail_elements)
+            raw_data = np.frombuffer(source, dtype=target_dtype, count=actual_count, offset=offset_bytes)
         elif hasattr(source, "read"):
             if offset_bytes > 0:
                 source.seek(offset_bytes, io.SEEK_SET)
             buffer = source.read() if count == -1 else source.read(count * element_size)
-            raw_data = np.frombuffer(buffer, dtype=target_dtype)
+            avail_elements = len(buffer) // element_size
+            actual_count = avail_elements if count == -1 else min(count, avail_elements)
+            raw_data = np.frombuffer(buffer, dtype=target_dtype, count=actual_count)
         else:
             raise TypeError(f"Unsupported source type: {type(source)}")
 
@@ -101,13 +106,15 @@ class SignalIngestionEngine:
         elif fmt == IQFormat.INT8:
             i_float = i_channel.astype(np.float32) / 128.0
             q_float = q_channel.astype(np.float32) / 128.0
-        elif fmt == IQFormat.FLOAT64:
-            return i_channel.astype(np.float64) + 1j * q_channel.astype(np.float64)
         else:
             i_float = i_channel.astype(np.float32)
             q_float = q_channel.astype(np.float32)
 
-        return i_float + 1j * q_float
+        # Sanitize NaNs or Infs that can happen if raw bytes are misinterpreted under wrong format
+        i_clean = np.nan_to_num(i_float, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
+        q_clean = np.nan_to_num(q_float, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
+
+        return i_clean + 1j * q_clean
 
     @staticmethod
     def parse_wav(

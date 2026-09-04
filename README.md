@@ -87,10 +87,19 @@ In intelligence, defence, and spectrum monitoring operations (e.g., NTRO), opera
   - Unit power (RMS = 1.0) and peak envelope normalizers.
 
 ### 2. Deep Learning Automatic Modulation Classification (AMC)
-- [x] **1D-CNN Modulation Classifier Architecture** ([`src/amc/models/cnn1d_classifier.py`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/src/amc/models/cnn1d_classifier.py)):
-  - PyTorch 3-block 1D-CNN with Conv1D, BatchNorm, ReLU, MaxPool1D, and Dropout layers.
-  - Takes raw 2-channel I/Q input tensors `[Batch, 2, Sequence_Length]`.
-  - Supports inference mode with softmax class probability distributions for BPSK, QPSK, 16-QAM, and FSK.
+- [x] **Real Trained 1D-CNN Modulation Classifier** ([`src/amc/models/cnn1d_classifier.py`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/src/amc/models/cnn1d_classifier.py)):
+  - PyTorch 4-block 1D-CNN with Conv1D, BatchNorm1D, ReLU, MaxPool1D, AdaptiveAvgPool1D, and Dropout.
+  - Takes normalized 2-channel complex I/Q input tensors `[Batch, 2, 4096]` (Ch0: $I$, Ch1: $Q$).
+  - Supports 4 trained modulation classes: **BPSK, QPSK, 16-QAM, 2-FSK**.
+  - Produces true softmax probabilities with conservative confidence gating and out-of-distribution (OOD) rejection.
+  - Checkpoint location: `models/amc_1dcnn_weights.pt` (715,972 parameters).
+  - Clean demarcation from signal-derived heuristic telemetry analysis (`AIST-2D.wav`).
+- [x] **Synthetic Dataset Generation & Training Engine** ([`src/amc/train_cnn.py`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/src/amc/train_cnn.py), [`src/amc/dataset_generator.py`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/src/amc/dataset_generator.py)):
+  - Trains across randomized SNR (0 to 30 dB), CFO (-4 to +4 kHz), carrier phase, and RRC pulse shaping.
+  - Zero-leakage 70/15/15 train/val/test splits.
+- [x] **Empirical Held-Out Validation Suite** ([`src/validation/cnn_validation.py`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/src/validation/cnn_validation.py)):
+  - Evaluates overall accuracy, precision/recall/F1, confusion matrix, and SNR performance breakdown.
+  - Full documentation: [`docs/cnn_training.md`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/docs/cnn_training.md).
 
 ### 3. Digital Signal Processing & Synchronization
 - [x] **Pulse Shaping & Matched Filtering** ([`src/dsp/synchronization/rrc_filter.py`](file:///c:/Users/harsh/OneDrive/Desktop/K%20S%20Harshitaa/Projects/Hackathons/SIH%202026/src/dsp/synchronization/rrc_filter.py)):

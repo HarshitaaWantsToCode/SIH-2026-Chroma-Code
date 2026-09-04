@@ -199,7 +199,7 @@ signal_raw = None
 meta_info = {}
 
 if uploaded_file is not None:
-    signal_bytes = uploaded_file.read()
+    signal_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
     fname = uploaded_file.name
     try:
         if fname.endswith(".wav"):
@@ -303,11 +303,24 @@ if signal_raw is not None and len(signal_raw) > 0:
         demo_payload_hint=meta_info.get("payload_type")
     )
 
+    # Safely parse numeric values from DSP parameter strings
+    snr_str = str(dsp_analysis.extracted_params.get("Estimated SNR", "0.0")).replace(" dB", "").strip()
+    try:
+        snr_parsed = float(snr_str)
+    except ValueError:
+        snr_parsed = 20.0
+
+    cfo_str = str(dsp_analysis.extracted_params.get("Carrier Frequency Offset (Δf)", "0.0")).replace(" Hz", "").strip()
+    try:
+        cfo_parsed = float(cfo_str)
+    except ValueError:
+        cfo_parsed = 0.0
+
     signal_dna = SignalDnaService.evaluate(
         signal=norm_signal,
         modulation=amc_res.modulation,
-        snr_db=float(dsp_analysis.extracted_params["Estimated SNR"].replace(" dB", "")),
-        cfo_hz=float(dsp_analysis.extracted_params["Carrier Frequency Offset (Δf)"].replace(" Hz", "")),
+        snr_db=snr_parsed,
+        cfo_hz=cfo_parsed,
         entropy_val=forensics_res.entropy_bits_per_byte,
         sample_rate=fs,
         symbol_rate=rs
@@ -493,10 +506,12 @@ if signal_raw is not None and len(signal_raw) > 0:
             """, unsafe_allow_html=True)
 
             st.markdown("<div class='panel-heading'>ANALYSIS STAGE EXECUTION</div>", unsafe_allow_html=True)
-            st.markdown("""
+            amc_stage_tag = "COMPLETE [REAL 1D-CNN]" if amc_res.classifier_type == "DEEP_1D_CNN" else "COMPLETE [HEURISTIC]"
+            amc_stage_color = "#10B981" if amc_res.classifier_type == "DEEP_1D_CNN" else "#3B82F6"
+            st.markdown(f"""
             <div class="data-panel" style="font-size:0.78rem;">
                 <div class="data-row"><span class="data-label">1. Ingestion & DC Offset</span><span class="data-val" style="color:#10B981;">COMPLETE [REAL]</span></div>
-                <div class="data-row"><span class="data-label">2. Neural AMC Classifier</span><span class="data-val" style="color:#F59E0B;">COMPLETE [REF]</span></div>
+                <div class="data-row"><span class="data-label">2. Neural AMC Classifier</span><span class="data-val" style="color:{amc_stage_color};">{amc_stage_tag}</span></div>
                 <div class="data-row"><span class="data-label">3. RRC & Clock Recovery</span><span class="data-val" style="color:#10B981;">COMPLETE [REAL]</span></div>
                 <div class="data-row"><span class="data-label">4. Costas PLL Carrier Sync</span><span class="data-val" style="color:#10B981;">COMPLETE [REAL]</span></div>
                 <div class="data-row"><span class="data-label">5. Constellation Demod</span><span class="data-val" style="color:#10B981;">COMPLETE [REAL]</span></div>
@@ -567,7 +582,12 @@ if signal_raw is not None and len(signal_raw) > 0:
         m_sec1, m_sec2 = st.columns([1, 1])
 
         with m_sec1:
-            st.markdown("<div class='panel-heading'>MODULATION ASSESSMENT <span class='ref-tag'>HEURISTIC / STATISTICAL</span></div>", unsafe_allow_html=True)
+            clf_type = getattr(amc_res, "classifier_type", "HEURISTIC_FEATURE_EXTRACTION")
+            is_cnn = clf_type == "DEEP_1D_CNN"
+            heading_tag = "1D CNN" if is_cnn else "HEURISTIC / STATISTICAL"
+            method_name = "1D CNN" if is_cnn else "Interpretable Feature Extraction"
+            
+            st.markdown(f"<div class='panel-heading'>MODULATION ASSESSMENT <span class='ref-tag'>{heading_tag}</span></div>", unsafe_allow_html=True)
             
             status_color = "#3B82F6" if amc_res.modulation != "UNKNOWN" else "#F59E0B"
             conf_display = f"{amc_res.confidence*100:.1f}%" if amc_res.confidence > 0.3 else "LOW"
@@ -576,8 +596,8 @@ if signal_raw is not None and len(signal_raw) > 0:
             <div class="data-panel">
                 <div style="font-size:1.6rem; font-weight:800; color:{status_color}; font-family:monospace;">{amc_res.modulation}</div>
                 <div class="data-row"><span class="data-label">Confidence</span><span class="data-val">{conf_display}</span></div>
-                <div class="data-row"><span class="data-label">Method</span><span class="data-val">Interpretable Feature Extraction</span></div>
-                <div class="data-row"><span class="data-label">Status</span><span class="status-badge {'status-normal' if amc_res.model_status=='HEURISTIC_EVALUATION' else 'status-elevated'}">{amc_res.model_status}</span></div>
+                <div class="data-row"><span class="data-label">Method</span><span class="data-val">{method_name}</span></div>
+                <div class="data-row"><span class="data-label">Status</span><span class="status-badge {'status-normal' if amc_res.model_status in ('REAL_TRAINED_MODEL', 'HEURISTIC_EVALUATION') else 'status-elevated'}">{amc_res.model_status}</span></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -592,7 +612,10 @@ if signal_raw is not None and len(signal_raw) > 0:
             st.plotly_chart(fig_amc, use_container_width=True)
 
             with st.expander("PyTorch 1D-CNN Model Status"):
-                st.caption("MODEL ARCHITECTURE READY — TRAINED WEIGHTS NOT LOADED")
+                if getattr(amc_classifier, "has_trained_weights", False):
+                    st.caption(f"MODEL WEIGHTS LOADED — {amc_classifier.weights_path}")
+                else:
+                    st.caption("MODEL UNAVAILABLE — FALLBACK HEURISTIC ACTIVE")
                 for lyr, defn in getattr(amc_res, "architecture_summary", {}).items():
                     st.write(f"- **{lyr}:** `{defn}`")
 

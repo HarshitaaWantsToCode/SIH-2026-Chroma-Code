@@ -145,10 +145,10 @@ class HeuristicModulationClassifier:
         if r_env > 2.50:
             is_comm_like = False
             evidence.append(f"Extreme envelope dynamic range (R_env = {r_env:.2f} > 2.50) matches acoustic speech/human voice.")
-        # B. Pure acoustic single-frequency resonance
-        elif flatness < 0.001:
+        # B. Pure acoustic single-frequency resonance or unmodulated real tone (extremely low spectral entropy)
+        elif flatness < 0.001 or (entropy < 0.20 and pk_sq > 200.0):
             is_comm_like = False
-            evidence.append(f"Excessively peaky spectrum (Flatness = {flatness:.5f}) matches pure acoustic single tone.")
+            evidence.append(f"Low spectral entropy ({entropy:.3f}) and discrete tonal concentration matches pure acoustic tone / mono glitch.")
         # C. Pure unmodulated carrier without data transitions
         elif freq_var < 1e-5:
             is_comm_like = False

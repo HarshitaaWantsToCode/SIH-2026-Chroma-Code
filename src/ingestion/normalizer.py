@@ -43,8 +43,15 @@ class SignalNormalizer:
         Returns:
             Tuple[np.ndarray, float]: (Normalized signal, Root Mean Square scaling factor).
         """
-        rms_power = np.sqrt(np.mean(np.abs(signal) ** 2) + eps)
-        normalized_signal = signal / rms_power
+        pwr = np.mean(np.abs(signal) ** 2)
+        if not np.isfinite(pwr) or pwr < eps:
+            rms_power = 1.0
+            normalized_signal = np.nan_to_num(signal, nan=0.0, posinf=1.0, neginf=-1.0)
+        else:
+            rms_power = float(np.sqrt(pwr))
+            normalized_signal = signal / rms_power
+            normalized_signal = np.nan_to_num(normalized_signal, nan=0.0, posinf=1.0, neginf=-1.0)
+
         return normalized_signal, float(rms_power)
 
     @staticmethod
